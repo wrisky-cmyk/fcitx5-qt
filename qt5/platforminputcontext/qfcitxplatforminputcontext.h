@@ -162,7 +162,7 @@ public Q_SLOTS:
                             int candidateIndex, int layoutHint, bool hasPrev,
                             bool hasNext);
     void serverSideFocusOut();
-    bool commitPreedit(QPointer<QObject> input = qApp->focusObject());
+    bool commitPreedit(QPointer<QObject> input = nullptr);
 private Q_SLOTS:
     void processKeyEventFinished(QDBusPendingCallWatcher *);
 

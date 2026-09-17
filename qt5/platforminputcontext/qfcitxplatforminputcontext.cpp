@@ -5,6 +5,7 @@
  *
  */
 
+#include <QApplication>
 #include <QDBusConnection>
 #include <QDebug>
 #include <QInputMethod>
@@ -343,6 +344,9 @@ void QFcitxPlatformInputContext::invokeAction(QInputMethod::Action imAction,
 }
 
 bool QFcitxPlatformInputContext::commitPreedit(QPointer<QObject> input) {
+    if (!input) {
+        input = focusObjectWrapper();
+    }
     if (!input) {
         return false;
     }
@@ -694,7 +698,7 @@ void QFcitxPlatformInputContext::commitString(const QString &str) {
     cursorPos_ = 0;
     preeditList_.clear();
     commitPreedit_.clear();
-    QObject *input = qGuiApp->focusObject();
+    QObject *input = focusObjectWrapper();
     if (!input) {
         return;
     }
@@ -706,7 +710,7 @@ void QFcitxPlatformInputContext::commitString(const QString &str) {
 
 void QFcitxPlatformInputContext::updateFormattedPreedit(
     const FcitxQtFormattedPreeditList &preeditList, int cursorPos) {
-    QObject *input = qGuiApp->focusObject();
+    QObject *input = focusObjectWrapper();
     if (!input) {
         return;
     }
@@ -771,7 +775,7 @@ void QFcitxPlatformInputContext::updateClientSideUI(
     const FcitxQtFormattedPreeditList &auxDown,
     const FcitxQtStringKeyValueList &candidates, int candidateIndex,
     int layoutHint, bool hasPrev, bool hasNext) {
-    QObject *input = qGuiApp->focusObject();
+    QObject *input = focusObjectWrapper();
     if (!input) {
         return;
     }
@@ -793,7 +797,7 @@ void QFcitxPlatformInputContext::updateClientSideUI(
 
 void QFcitxPlatformInputContext::deleteSurroundingText(int offset,
                                                        unsigned int _nchar) {
-    QObject *input = qGuiApp->focusObject();
+    QObject *input = focusObjectWrapper();
     if (!input) {
         return;
     }
@@ -860,7 +864,7 @@ void QFcitxPlatformInputContext::forwardKey(unsigned int keyval,
     FcitxQtICData &data = *static_cast<FcitxQtICData *>(
         proxy->property("icData").value<void *>());
     auto *w = data.window();
-    QObject *input = qGuiApp->focusObject();
+    QObject *input = focusObjectWrapper();
     auto *window = focusWindowWrapper();
     if (input && window && w == window) {
         std::unique_ptr<QKeyEvent> keyevent{
@@ -1077,7 +1081,7 @@ bool QFcitxPlatformInputContext::filterEvent(const QEvent *event) {
             break;
         }
 
-        QObject *input = qGuiApp->focusObject();
+        QObject *input = focusObjectWrapper();
 
         if (!input) {
             break;
@@ -1279,7 +1283,21 @@ QWindow *QFcitxPlatformInputContext::focusWindowWrapper() const {
 }
 
 QObject *QFcitxPlatformInputContext::focusObjectWrapper() const {
-    return deepestFocusProxy(qGuiApp->focusObject());
+    QObject *object = qGuiApp->focusObject();
+    // QGuiApplication::focusObject() follows the window that the compositor
+    // reports as focused. That window is not necessarily the one the
+    // application sends key events to: for a grabbing popup Qt keeps the focus
+    // widget in the popup window while a compositor may keep the parent window
+    // focused. Prefer the widget that actually receives keyboard input then,
+    // otherwise the input method would keep talking to the parent window.
+    if (auto *widget = QApplication::focusWidget()) {
+        auto *window = widget->window() ? widget->window()->windowHandle()
+                                        : nullptr;
+        if (window && window != qGuiApp->focusWindow()) {
+            object = widget;
+        }
+    }
+    return deepestFocusProxy(object);
 }
 
 QRect QFcitxPlatformInputContext::cursorRectangleWrapper() const {
